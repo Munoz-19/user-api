@@ -1,68 +1,69 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
+
 const app = express();
-
-// Usa la variable PORT solo una vez
-const PORT = process.env.PORT || 3000;
-
-// Middlewares
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// Base de datos SQLite
-const db = new sqlite3.Database('./database.sqlite');
+// Conexión a PostgreSQL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL, // Render provee DATABASE_URL como variable de entorno
+  ssl: {
+    rejectUnauthorized: false, // importante para conexiones seguras en Render
+  },
+});
 
 // Crear tabla si no existe
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      email TEXT,
-      phone TEXT,
-      photo TEXT,
-      latitude REAL,
-      longitude REAL
-    )
-  `);
-});
+const createTable = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        photo TEXT NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL
+      )
+    `);
+    console.log('Tabla "users" creada o ya existente.');
+  } catch (error) {
+    console.error('Error creando la tabla:', error);
+  }
+};
+
+createTable();
 
 // Endpoint para registrar usuario
-app.post('/api/users', (req, res) => {
+app.post('/api/users', async (req, res) => {
   const { name, email, phone, photo, latitude, longitude } = req.body;
-
-  if (!name || !email || !phone || !photo || !latitude || !longitude) {
-    return res.status(400).json({ error: 'Faltan campos obligatorios' });
+  try {
+    await pool.query(
+      'INSERT INTO users (name, email, phone, photo, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6)',
+      [name, email, phone, photo, latitude, longitude]
+    );
+    res.status(201).json({ message: 'Usuario registrado correctamente' });
+  } catch (error) {
+    console.error('Error al insertar usuario:', error);
+    res.status(500).json({ error: 'Error al registrar usuario' });
   }
-
-  const stmt = db.prepare(`
-    INSERT INTO users (name, email, phone, photo, latitude, longitude)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  stmt.run(name, email, phone, photo, latitude, longitude, function (err) {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al registrar usuario' });
-    }
-    res.json({ id: this.lastID });
-  });
 });
 
-// Endpoint para consultar usuarios
-app.get('/api/users', (req, res) => {
-  db.all('SELECT * FROM users', (err, rows) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al obtener usuarios' });
-    }
-    res.json(rows);
-  });
+// Endpoint para obtener usuarios
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM users');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    res.status(500).json({ error: 'Error al obtener usuarios' });
+  }
 });
 
-// Iniciar servidor
+// Puerto dinámico para Render
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API corriendo en el puerto ${PORT}`);
 });

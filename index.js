@@ -3,6 +3,8 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
 const app = express();
+
+// Usa la variable PORT solo una vez
 const PORT = process.env.PORT || 3000;
 
 // Middlewares
@@ -62,5 +64,5 @@ app.get('/api/users', (req, res) => {
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`API corriendo en http://localhost:${PORT}`);
+  console.log(`API corriendo en el puerto ${PORT}`);
 });
